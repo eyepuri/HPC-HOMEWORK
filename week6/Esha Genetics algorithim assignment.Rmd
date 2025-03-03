@@ -1,0 +1,146 @@
+---
+title: "Week 6 Assignment"
+author: "ESHA"
+date: "2025-03-02"
+output: html_document
+---
+
+# Install necessary packages
+```{r}
+install.packages("data.table")
+install.packages("geosphere")
+
+library(data.table)
+library(geosphere)
+install.packages("GA")
+library(GA)
+install.packages("purrr")
+library(purrr)
+install.packages("sf")
+library(sf)
+```
+```{r}
+library(data.table)
+library(geosphere)
+library(GA)
+library(purrr)
+library(sf)
+```
+
+```{r}
+install.packages("parallel")
+install.packages("doParallel")
+```
+
+getwd()
+
+setwd("C:/Users/palad/Downloads/Mo_pop_Sim")
+
+setwd("C:/Users/palad/Downloads/MO_2018_Federally_Qualified_Health_Center_Locations/MO_2018_Federally_Qualified_Health_Center_Locations")
+
+
+
+
+
+```{r}
+## Load the population data
+pop.data <- data.table::fread("C:/Users/palad/Downloads/Mo_pop_Sim/Mo_pop_Sim.csv")
+str(pop.data)
+frac <- 0.0001
+small.data <- pop.data[sample(1:nrow(pop.data),
+                               size = round(nrow(pop.data) * frac),
+                               replace = F), ## extract a sample of randomlychosen 1% rows
+                        ]  ## and choose all columns
+
+```
+
+
+
+```{r}
+
+## Load the FQHC data
+data_path <- ("C:/Users/palad/Downloads/MO_2018_Federally_Qualified_Health_Center_Locations/MO_2018_Federally_Qualified_Health_Center_Locations")
+fqhc.data <- data.table(as.data.frame(st_read(data_path,
+                     'MO_2018_Federally_Qualified_Health_Center_Locations')))
+names(fqhc.data)
+```
+
+
+
+
+```{r}
+fqhc.data <- fqhc.data[, .(Facility, Longitude, Latitude)]
+small.data <- small.data[, .(long, lat)]  # Use small population data
+
+# Function to calculate the number of residents within a 30-mile radius (~48,280 meters)
+count_residences <- function(fqhc, pop_data) {
+  distances <- distHaversine(matrix(c(pop_data$long, pop_data$lat), ncol = 2),
+                             matrix(c(fqhc$Longitude, fqhc$Latitude), ncol = 2))
+  return(sum(distances <= 48280))  # Count residents within the 30-mile radius
+}
+
+# Fitness function for GA: sum of residents covered by selected FQHCs
+fitness_function <- function(selected_indices) {
+  selected_fqhc <- fqhc.data[selected_indices, ]
+  total_coverage <- sum(sapply(1:nrow(selected_fqhc), function(i) count_residences(selected_fqhc[i], small.data)))
+  return(total_coverage)
+}
+```
+
+
+```{r}
+library(parallel)
+library(doParallel)
+```
+
+
+```{r}
+library(GA)
+library(sf)
+library(data.table)
+
+```
+
+```{r}
+# Run Genetic Algorithm
+ga_result <- ga(type = "permutation",
+                fitness = function(indices) fitness_function(indices),
+                lower = 1, upper = nrow(fqhc.data), 
+                popSize = 50, maxiter = 100, run = 10,
+                parallel = TRUE, pmutation = 0.2,
+                names = fqhc.data$Facility)
+
+# Get the best 8 selected locations
+best_indices <- ga_result@solution[1, ]
+best_fqhc <- fqhc.data[best_indices, ]
+
+# Display selected FQHC locations
+
+print(best_fqhc)
+
+```
+
+  
+For selecting 8 optimal FQHCs for specialized mental health services, we use population density within a 30-mile radius as the fitness criterion. This approach ensures that services are placed where they can benefit the most people.  
+
+Key Assumptions:
+Higher population density indicates higher service demand  
+Residents are more likely to use services within 30 miles.  
+The need for mental health services is evenly distributed across the population.  
+Population distribution remains static during analysis.  
+
+Fitness Function : 
+Metric: The total number of residents within a 30-mile radius** of each FQHC.  
+Goal: Maximize this number to select the 8 FQHCs serving the highest number of residents.  
+
+
+
+
+
+
+
+
+
+
+
+
