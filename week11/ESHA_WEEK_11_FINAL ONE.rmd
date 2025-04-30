@@ -1,0 +1,181 @@
+
+
+```{r}
+# Load necessary libraries
+library(mlbench)
+library(purrr)
+library(dplyr)
+library(xgboost)
+library(caret)
+```
+
+```{r}
+# Load and clean original dataset
+data("PimaIndiansDiabetes2")
+ds <- as.data.frame(na.omit(PimaIndiansDiabetes2))
+
+# Fit logistic regression model
+logmodel <- glm(diabetes ~ ., data = ds, family = "binomial")
+
+# Extract coefficients
+cfs <- coefficients(logmodel)
+
+# Predictor variable names
+prednames <- variable.names(ds)[-9]
+```
+
+
+
+```{r}
+# Sizes of datasets
+sizes <- c(100, 1000, 10000, 100000, 1000000, 10000000)
+
+# Generate and save datasets
+for (sz in sizes) {
+  cat("Generating dataset of size:", sz, "\n")
+  
+  dfdata <- map_dfc(prednames, function(nm) {
+    sample(ds[[nm]], size = sz, replace = TRUE)
+  })
+  
+  names(dfdata) <- prednames
+  
+  pvec <- map(1:8, function(pnum) {
+    cfs[pnum + 1] * dfdata[[prednames[pnum]]]
+  }) %>% reduce(`+`) + cfs[1]
+  
+  dfdata$outcome <- ifelse(1 / (1 + exp(-pvec)) > 0.5, 1, 0)
+  
+  write.csv(dfdata, paste0("dataset_", sz, ".csv"), row.names = FALSE)
+}
+
+cat("✅ All datasets generated successfully!\n\n")
+
+```
+
+```{r}
+library(xgboost)
+library(caret)
+library(dplyr)
+library(tibble)
+
+set.seed(123)
+
+# Define dataset sizes
+sizes <- c(100, 1000, 10000, 100000, 1000000, 10000000)
+
+# Initialize empty result tables
+results_direct <- tibble(
+  Method = character(),
+  Dataset_size = numeric(),
+  Accuracy = numeric(),
+  Time_seconds = numeric()
+)
+
+results_caret <- tibble(
+  Method = character(),
+  Dataset_size = numeric(),
+  Accuracy = numeric(),
+  Time_seconds = numeric()
+)
+
+# Define caret train control
+train_ctrl <- trainControl(method = "cv", number = 5)
+
+# Loop over each dataset size
+for (sz in sizes) {
+  file_path <- paste0("dataset_", sz, ".csv")
+  cat("\n📦 Processing dataset:", file_path, "\n")
+  
+ 
+  
+  cat("🚀 Training Direct XGBoost...\n")
+  df_direct <- read.csv(file_path)
+  
+  x <- as.matrix(df_direct[, -ncol(df_direct)])  # Features
+  y <- df_direct$outcome
+  
+  dtrain <- xgb.DMatrix(data = x, label = y)
+  
+  params <- list(
+    booster = "gbtree",
+    objective = "binary:logistic",
+    eval_metric = "error"
+  )
+  
+  start_time_direct <- Sys.time()
+  
+  model_direct <- xgb.train(
+    params = params,
+    data = dtrain,
+    nrounds = 100,
+    verbose = 0
+  )
+  
+  preds_direct <- predict(model_direct, dtrain)
+  pred_labels_direct <- ifelse(preds_direct > 0.5, 1, 0)
+  acc_direct <- mean(pred_labels_direct == y)
+  
+  end_time_direct <- Sys.time()
+  
+  results_direct <- results_direct %>% add_row(
+    Method = "Direct XGBoost",
+    Dataset_size = sz,
+    Accuracy = round(acc_direct, 4),
+    Time_seconds = round(as.numeric(difftime(end_time_direct, start_time_direct, units = "secs")), 2)
+  )
+  
+ 
+  
+  cat("🎯 Training Caret XGBoost 5-fold CV...\n")
+  df_caret <- read.csv(file_path)
+  df_caret$outcome <- as.factor(df_caret$outcome)
+  
+  start_time_caret <- Sys.time()
+  
+  model_caret <- suppressWarnings(
+    train(
+      outcome ~ .,
+      data = df_caret,
+      method = "xgbTree",
+      trControl = train_ctrl,
+      tuneGrid = expand.grid(
+        nrounds = 100,
+        max_depth = 6,
+        eta = 0.3,
+        gamma = 0,
+        colsample_bytree = 1,
+        min_child_weight = 1,
+        subsample = 1
+      ),
+      verbose = FALSE
+    )
+  )
+  
+  acc_caret <- max(model_caret$results$Accuracy)
+  
+  end_time_caret <- Sys.time()
+  
+  results_caret <- results_caret %>% add_row(
+    Method = "Caret XGBoost (5-fold CV)",
+    Dataset_size = sz,
+    Accuracy = round(acc_caret, 4),
+    Time_seconds = round(as.numeric(difftime(end_time_caret, start_time_caret, units = "secs")), 2)
+  )
+}
+
+# Show Results
+cat("\n\n✅ Direct XGBoost Results:\n")
+print(results_direct)
+
+cat("\n\n✅ Caret XGBoost (5-Fold CV) Results:\n")
+print(results_caret)
+
+```
+
+```{r}
+all_results <- bind_rows(results_direct, results_caret)
+write.csv(all_results, "final_xgboost_results.csv", row.names = FALSE)
+
+```
+
