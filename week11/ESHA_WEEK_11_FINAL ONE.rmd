@@ -49,7 +49,7 @@ for (sz in sizes) {
   write.csv(dfdata, paste0("dataset_", sz, ".csv"), row.names = FALSE)
 }
 
-cat("✅ All datasets generated successfully!\n\n")
+cat(" All datasets generated successfully!\n\n")
 
 ```
 
@@ -85,11 +85,11 @@ train_ctrl <- trainControl(method = "cv", number = 5)
 # Loop over each dataset size
 for (sz in sizes) {
   file_path <- paste0("dataset_", sz, ".csv")
-  cat("\n📦 Processing dataset:", file_path, "\n")
+  cat("\n Processing dataset:", file_path, "\n")
   
  
   
-  cat("🚀 Training Direct XGBoost...\n")
+  cat(" Training Direct XGBoost...\n")
   df_direct <- read.csv(file_path)
   
   x <- as.matrix(df_direct[, -ncol(df_direct)])  # Features
@@ -127,7 +127,7 @@ for (sz in sizes) {
   
  
   
-  cat("🎯 Training Caret XGBoost 5-fold CV...\n")
+  cat(" Training Caret XGBoost 5-fold CV...\n")
   df_caret <- read.csv(file_path)
   df_caret$outcome <- as.factor(df_caret$outcome)
   
@@ -165,10 +165,10 @@ for (sz in sizes) {
 }
 
 # Show Results
-cat("\n\n✅ Direct XGBoost Results:\n")
+cat("\n\n Direct XGBoost Results:\n")
 print(results_direct)
 
-cat("\n\n✅ Caret XGBoost (5-Fold CV) Results:\n")
+cat("\n\n Caret XGBoost (5-Fold CV) Results:\n")
 print(results_caret)
 
 ```
